@@ -242,7 +242,7 @@ function VideoModal({ item, onClose }: { item: PublicItem; onClose: () => void }
           )}
           {err && !loading && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <p style={{ color: "rgba(255,255,255,.4)", fontSize: 14 }}>تعذّر تحميل الفيديو</p>
+              <p style={{ color: "rgba(255,255,255,.4)", fontSize: 14 }}>{lang === "ar" ? "تعذّر تحميل الفيديو" : "Failed to load video"}</p>
             </div>
           )}
           {url && !loading && (
@@ -298,7 +298,7 @@ function VideoModal({ item, onClose }: { item: PublicItem; onClose: () => void }
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M12 5v14M5 12l7 7 7-7"/>
               </svg>
-              {dl ? "جارٍ التحميل…" : "تحميل الفيديو"}
+              {dl ? (lang === "ar" ? "جارٍ التحميل…" : "Downloading…") : (lang === "ar" ? "تحميل الفيديو" : "Download Video")}
             </button>
           )}
         </div>
@@ -310,35 +310,46 @@ function VideoModal({ item, onClose }: { item: PublicItem; onClose: () => void }
 }
 
 /* ─── Filter chips (YouTube-style) ──────────────────────── */
-function FilterChips({ category, activeSubId, onSelect }: {
-  category: PubCategory | null | undefined;
+function SubFilter({
+  subs, lang, activeSubId, onSelect,
+}: {
+  subs: PubCategory["subcategories"]; lang: string;
   activeSubId: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const subs = category?.subcategories ?? [];
-  if (!category || subs.length === 0) return null;
-
+  if (subs.length === 0) return null;
   return (
     <div style={{
-      display: "flex", gap: 8, flexWrap: "nowrap",
-      overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2,
+      position: "sticky", top: 65, zIndex: 40,
+      background: "color-mix(in srgb,var(--bg) 94%,transparent)",
+      backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+      borderBottom: "1px solid var(--line)",
     }}>
-      {[{ id: null as string | null, name: "الكل" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(chip => {
-        const active = chip.id === activeSubId;
-        return (
-          <button key={chip.id ?? "all"} onClick={() => onSelect(chip.id)}
-            style={{
-              flexShrink: 0, padding: "6px 14px", borderRadius: 999, fontSize: 13,
-              fontWeight: active ? 700 : 500,
-              border: `1px solid ${active ? "var(--ink)" : "var(--line)"}`,
-              background: active ? "var(--ink)" : "transparent",
-              color: active ? "var(--bg)" : "var(--ink-2)",
-              cursor: "pointer", transition: "all .15s",
-            }}>
-            {chip.name}
-          </button>
-        );
-      })}
+      <div className="vd-wrap">
+        <div style={{
+          display: "flex", gap: 8, alignItems: "center",
+          padding: "10px 0", overflowX: "auto", scrollbarWidth: "none",
+        }}>
+          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>{lang === "ar" ? "تصفية:" : "Filter:"}</span>
+          {[{ id: null, name: lang === "ar" ? "الكل" : "All" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(s => {
+            const active = s.id === activeSubId;
+            return (
+              <button key={s.id ?? "__all"} onClick={() => onSelect(s.id)}
+                style={{
+                  flexShrink: 0, padding: "7px 20px", borderRadius: 999,
+                  border: `1px solid ${active ? "var(--gold)" : "var(--line)"}`,
+                  background: active ? "var(--gold)" : "transparent",
+                  color: active ? "var(--forest)" : "var(--ink-2)",
+                  fontWeight: active ? 700 : 500, fontSize: 13,
+                  cursor: "pointer", transition: "all .15s",
+                  boxShadow: active ? "0 2px 10px rgba(200,168,75,.28)" : "none",
+                }}>
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -368,14 +379,16 @@ export default function VideoPage() {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(false);
 
+  /* fetch category (includes subcategories) */
   useEffect(() => {
     const ctrl = new AbortController();
     fetchPublicCategories(lang, ctrl.signal)
-      .then(cats => setCategory(cats.find(c => c.name.includes("المشاهدة")) ?? null))
+      .then(cats => setCategory(cats.find(c => c.sortOrder === 3) ?? null))
       .catch(e => { if (e.name !== "AbortError") setCategory(null); });
     return () => ctrl.abort();
   }, [lang]);
 
+  /* fetch contents filtered by category + optional subcategory */
   useEffect(() => {
     if (category === undefined) return;
     setLoading(true); setError(false);
@@ -424,10 +437,10 @@ export default function VideoPage() {
               <h1 style={{ color: "#fff", margin: 0, fontWeight: 900,
                 fontSize: "clamp(22px,4vw,36px)", lineHeight: 1.1,
                 fontFamily: "'Noto Kufi Arabic',sans-serif" }}>
-                🎬 المشاهدة
+                {lang === "ar" ? "المشاهدة" : "Watch"}
               </h1>
               <p style={{ color: "rgba(255,255,255,.45)", margin: "6px 0 0", fontSize: 14 }}>
-                بعض المشاهد التي تعكس تراث ونشاطات الطريقة
+                {lang === "ar" ? "بعض المشاهد التي تعكس تراث ونشاطات الطريقة" : "Scenes reflecting the heritage and activities of the order"}
               </p>
             </div>
             {!loading && items.length > 0 && (
@@ -436,27 +449,15 @@ export default function VideoPage() {
                 <div style={{ color: "var(--gold)", fontWeight: 900, fontSize: 22, lineHeight: 1 }}>
                   {totalPages * pageSize}+
                 </div>
-                <div style={{ color: "rgba(255,255,255,.4)", fontSize: 11, marginTop: 3 }}>فيديو</div>
+                <div style={{ color: "rgba(255,255,255,.4)", fontSize: 11, marginTop: 3 }}>{lang === "ar" ? "فيديو" : "video"}</div>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Sticky filter chips ── */}
-      {category && (category.subcategories?.length ?? 0) > 0 && (
-        <div style={{
-          position: "sticky", top: 65, zIndex: 40,
-          background: "color-mix(in srgb,var(--bg) 92%,transparent)",
-          backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          borderBottom: "1px solid var(--line)",
-          paddingTop: 10, paddingBottom: 10,
-        }}>
-          <div className="vd-wrap">
-            <FilterChips category={category} activeSubId={subId} onSelect={handleSub} />
-          </div>
-        </div>
-      )}
+      {/* ── Subcategory filter — same pattern as articles ── */}
+      <SubFilter subs={category?.subcategories ?? []} lang={lang} activeSubId={subId} onSelect={handleSub} />
 
       {/* ── Videos grid ── */}
       <main style={{ flex: 1 }}>
@@ -481,7 +482,7 @@ export default function VideoPage() {
           {!loading && !error && items.length === 0 && (
             <div style={{ textAlign: "center", padding: "80px 0" }}>
               <div style={{ fontSize: 52, marginBottom: 16 }}>🎬</div>
-              <p style={{ color: "var(--muted)", fontSize: 15 }}>لا توجد مقاطع فيديو في هذا القسم حالياً</p>
+              <p style={{ color: "var(--muted)", fontSize: 15 }}>{lang === "ar" ? "لا توجد مقاطع فيديو في هذا القسم حالياً" : "No videos available in this section yet"}</p>
             </div>
           )}
 

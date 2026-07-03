@@ -42,9 +42,9 @@ function readEstimate(summary: string | null) {
 
 /* ── Subcategory filter bar ─────────────────────────────────── */
 function SubFilter({
-  subs, activeSubId, onSelect,
+  subs, lang, activeSubId, onSelect,
 }: {
-  subs: PubCategory["subcategories"];
+  subs: PubCategory["subcategories"]; lang: string;
   activeSubId: string | null;
   onSelect: (id: string | null) => void;
 }) {
@@ -62,8 +62,8 @@ function SubFilter({
           display: "flex", gap: 8, alignItems: "center",
           padding: "10px 0", overflowX: "auto", scrollbarWidth: "none",
         }}>
-          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>تصفية:</span>
-          {[{ id: null, name: "الكل" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(s => {
+          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>{lang === "ar" ? "تصفية:" : "Filter:"}</span>
+          {[{ id: null, name: lang === "ar" ? "الكل" : "All" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(s => {
             const active = s.id === activeSubId;
             return (
               <button key={s.id ?? "__all"} onClick={() => onSelect(s.id)}
@@ -472,7 +472,7 @@ export default function ArticlesPage() {
       </section>
 
       {/* Subcategory filter bar */}
-      <SubFilter subs={subs} activeSubId={subId} onSelect={handleSub} />
+      <SubFilter subs={subs} lang={lang} activeSubId={subId} onSelect={handleSub} />
 
       {/* Content */}
       <main ref={mainRef} style={{ flex: 1, paddingTop: 36, paddingBottom: 64 }}>

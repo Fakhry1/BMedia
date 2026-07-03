@@ -10,7 +10,7 @@ import { useLang } from "@/lib/LangContext";
 
 const PALETTE = ["#3B82F6","#8B5CF6","#10B981","#F59E0B","#EC4899","#06B6D4","#EF4444"];
 const accent  = (t: string) => PALETTE[t.charCodeAt(0) % PALETTE.length];
-const RATIOS  = ["133%","100%","75%","115%","90%"];
+const RATIOS  = ["100%","100%","100%","100%","100%"];
 
 function fmtDate(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString("ar-EG", { month: "short", day: "numeric", year: "numeric" }) : "";
@@ -92,6 +92,8 @@ function ImageCard({ item, index, onClick }: { item: PublicItem; index: number; 
         {imgUrl && (
           <Image src={imgUrl} alt={item.title} fill
             sizes="(max-width: 720px) 50vw, (max-width: 1100px) 33vw, 25vw"
+            loading={index === 0 ? "eager" : "lazy"}
+            priority={index === 0}
             style={{ objectFit: "cover", transform: hover ? "scale(1.06)" : "scale(1)", transition: "transform .5s ease" }} />
         )}
 
@@ -412,33 +414,47 @@ function zoomIcon(sym: string) {
   return <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>{sym}</span>;
 }
 
-/* ─── Sub-category filter ────────────────────────────────── */
-function FilterChips({ category, activeSubId, onSelect }: {
-  category: PubCategory | null | undefined;
+/* ─── SubFilter — same pattern as articles ───────────────── */
+function SubFilter({
+  subs, lang, activeSubId, onSelect,
+}: {
+  subs: PubCategory["subcategories"]; lang: string;
   activeSubId: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const subs = category?.subcategories ?? [];
-  if (!category || subs.length === 0) return null;
+  if (subs.length === 0) return null;
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "nowrap",
-      overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
-      {[{ id: null as string | null, name: "الكل" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(chip => {
-        const active = chip.id === activeSubId;
-        return (
-          <button key={chip.id ?? "all"} onClick={() => onSelect(chip.id)}
-            style={{
-              flexShrink: 0, padding: "6px 16px", borderRadius: 999, fontSize: 13,
-              fontWeight: active ? 700 : 500,
-              border: `1px solid ${active ? "var(--ink)" : "var(--line)"}`,
-              background: active ? "var(--ink)" : "transparent",
-              color: active ? "var(--bg)" : "var(--ink-2)",
-              cursor: "pointer", transition: "all .15s",
-            }}>
-            {chip.name}
-          </button>
-        );
-      })}
+    <div style={{
+      position: "sticky", top: 65, zIndex: 40,
+      background: "color-mix(in srgb,var(--bg) 94%,transparent)",
+      backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+      borderBottom: "1px solid var(--line)",
+    }}>
+      <div className="gl-wrap">
+        <div style={{
+          display: "flex", gap: 8, alignItems: "center",
+          padding: "10px 0", overflowX: "auto", scrollbarWidth: "none",
+        }}>
+          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>{lang === "ar" ? "تصفية:" : "Filter:"}</span>
+          {[{ id: null, name: lang === "ar" ? "الكل" : "All" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(s => {
+            const active = s.id === activeSubId;
+            return (
+              <button key={s.id ?? "__all"} onClick={() => onSelect(s.id)}
+                style={{
+                  flexShrink: 0, padding: "7px 20px", borderRadius: 999,
+                  border: `1px solid ${active ? "var(--gold)" : "var(--line)"}`,
+                  background: active ? "var(--gold)" : "transparent",
+                  color: active ? "var(--forest)" : "var(--ink-2)",
+                  fontWeight: active ? 700 : 500, fontSize: 13,
+                  cursor: "pointer", transition: "all .15s",
+                  boxShadow: active ? "0 2px 10px rgba(200,168,75,.28)" : "none",
+                }}>
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -468,14 +484,16 @@ export default function GalleryPage() {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(false);
 
+  /* fetch category (includes subcategories) */
   useEffect(() => {
     const ctrl = new AbortController();
     fetchPublicCategories(lang, ctrl.signal)
-      .then(cats => setCategory(cats.find(c => c.name.includes("صور")) ?? null))
+      .then(cats => setCategory(cats.find(c => c.sortOrder === 4) ?? null))
       .catch(e => { if (e.name !== "AbortError") setCategory(null); });
     return () => ctrl.abort();
   }, [lang]);
 
+  /* fetch contents filtered by category + optional subcategory */
   useEffect(() => {
     if (category === undefined) return;
     setLoading(true); setError(false);
@@ -551,19 +569,8 @@ export default function GalleryPage() {
         </div>
       </div>
 
-      {/* ── Sticky filter ── */}
-      {category && (category.subcategories?.length ?? 0) > 0 && (
-        <div style={{
-          position: "sticky", top: 65, zIndex: 40,
-          background: "color-mix(in srgb,var(--bg) 92%,transparent)",
-          backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          borderBottom: "1px solid var(--line)", paddingTop: 10, paddingBottom: 10,
-        }}>
-          <div className="gl-wrap">
-            <FilterChips category={category} activeSubId={subId} onSelect={handleSub} />
-          </div>
-        </div>
-      )}
+      {/* ── Subcategory filter — same pattern as articles ── */}
+      <SubFilter subs={category?.subcategories ?? []} lang={lang} activeSubId={subId} onSelect={handleSub} />
 
       {/* ── Masonry grid ── */}
       <main style={{ flex: 1 }}>
@@ -623,17 +630,18 @@ export default function GalleryPage() {
           padding-right: 20px;
         }
         .gl-masonry {
-          columns: 4;
-          column-gap: 14px;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 14px;
         }
         .gl-card {
           break-inside: avoid;
           margin-bottom: 14px;
         }
-        @media (max-width: 1100px) { .gl-masonry { columns: 3; } }
-        @media (max-width: 720px)  { .gl-masonry { columns: 2; column-gap: 10px; } .gl-card { margin-bottom: 10px; } }
+        @media (max-width: 1100px) { .gl-masonry { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 720px)  { .gl-masonry { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
         @media (max-width: 640px)  { .gl-wrap { padding-left: 14px; padding-right: 14px; } }
-        @media (max-width: 420px)  { .gl-masonry { columns: 2; column-gap: 8px; } .gl-card { margin-bottom: 8px; } }
+        @media (max-width: 420px)  { .gl-masonry { grid-template-columns: repeat(2, 1fr); gap: 8px; } }
       `}</style>
     </div>
   );

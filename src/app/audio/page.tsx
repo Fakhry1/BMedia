@@ -248,35 +248,47 @@ function SkeletonCard() {
   );
 }
 
-/* ─── Filter Pills ───────────────────────────────────────── */
-function FilterPills({ category, activeSubId, onSelect }: {
-  category: PubCategory | null | undefined;
+/* ─── SubFilter — same pattern as articles page ─────────── */
+function SubFilter({
+  subs, lang, activeSubId, onSelect,
+}: {
+  subs: PubCategory["subcategories"]; lang: string;
   activeSubId: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const subs = category?.subcategories ?? [];
-  if (!category || subs.length === 0) return null;
-
+  if (subs.length === 0) return null;
   return (
     <div style={{
-      display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap",
-      overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2,
+      position: "sticky", top: 65, zIndex: 40,
+      background: "color-mix(in srgb,var(--bg) 94%,transparent)",
+      backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+      borderBottom: "1px solid var(--line)",
     }}>
-      {[{ id: null as string | null, name: "الكل" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(pill => {
-        const active = pill.id === activeSubId;
-        return (
-          <button key={pill.id ?? "all"} onClick={() => onSelect(pill.id)}
-            style={{
-              flexShrink: 0, padding: "6px 16px", borderRadius: 999, fontSize: 13,
-              fontWeight: active ? 700 : 500,
-              border: `1px solid ${active ? ACCENT : "var(--line)"}`,
-              background: active ? ACCENT : "transparent",
-              color: active ? "#fff" : "var(--ink-2)", cursor: "pointer", transition: "all .15s",
-            }}>
-            {pill.name}
-          </button>
-        );
-      })}
+      <div className="au-wrap">
+        <div style={{
+          display: "flex", gap: 8, alignItems: "center",
+          padding: "10px 0", overflowX: "auto", scrollbarWidth: "none",
+        }}>
+          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>{lang === "ar" ? "تصفية:" : "Filter:"}</span>
+          {[{ id: null, name: lang === "ar" ? "الكل" : "All" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(s => {
+            const active = s.id === activeSubId;
+            return (
+              <button key={s.id ?? "__all"} onClick={() => onSelect(s.id)}
+                style={{
+                  flexShrink: 0, padding: "7px 20px", borderRadius: 999,
+                  border: `1px solid ${active ? "var(--gold)" : "var(--line)"}`,
+                  background: active ? "var(--gold)" : "transparent",
+                  color: active ? "var(--forest)" : "var(--ink-2)",
+                  fontWeight: active ? 700 : 500, fontSize: 13,
+                  cursor: "pointer", transition: "all .15s",
+                  boxShadow: active ? "0 2px 10px rgba(200,168,75,.28)" : "none",
+                }}>
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -368,7 +380,7 @@ function AudioModal({ item, onClose }: { item: PublicItem; onClose: () => void }
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "16px 0" }}>
               <div style={{ width: 32, height: 32, borderRadius: "50%", border: `3px solid ${c}`,
                 borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
-              <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>جارٍ التحميل…</p>
+              <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{lang === "ar" ? "جارٍ التحميل…" : "Loading…"}</p>
             </div>
           )}
 
@@ -393,7 +405,7 @@ function AudioModal({ item, onClose }: { item: PublicItem; onClose: () => void }
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M12 5v14M5 12l7 7 7-7"/>
                 </svg>
-                {dl ? "جارٍ التحميل…" : "تحميل الحلقة"}
+                {dl ? (lang === "ar" ? "جارٍ التحميل…" : "Downloading…") : (lang === "ar" ? "تحميل الحلقة" : "Download Episode")}
               </button>
             </>
           )}
@@ -429,14 +441,16 @@ export default function AudioPage() {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(false);
 
+  /* fetch category (includes subcategories) */
   useEffect(() => {
     const ctrl = new AbortController();
     fetchPublicCategories(lang, ctrl.signal)
-      .then(cats => setCategory(cats.find(c => c.name.includes("السماع")) ?? null))
+      .then(cats => setCategory(cats.find(c => c.sortOrder === 2) ?? null))
       .catch(e => { if (e.name !== "AbortError") setCategory(null); });
     return () => ctrl.abort();
   }, [lang]);
 
+  /* fetch contents filtered by category + optional subcategory */
   useEffect(() => {
     if (category === undefined) return;
     setLoading(true); setError(false);
@@ -494,29 +508,18 @@ export default function AudioPage() {
             <div>
               <h1 style={{ color: "#fff", margin: 0, fontSize: "clamp(22px,4vw,36px)",
                 fontWeight: 900, lineHeight: 1.1 }}>
-                🎧 استمتع بالسماع
+                {lang === "ar" ? "استمتع بالسماع" : "Enjoy Listening"}
               </h1>
               <p style={{ color: "rgba(255,255,255,.5)", margin: "5px 0 0", fontSize: 14 }}>
-                طاب وقت السماع
+                {lang === "ar" ? "طاب وقت السماع" : "Have a great listening experience"}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Sticky subcategory filter ── */}
-      {category && (category.subcategories?.length ?? 0) > 0 && (
-        <div style={{
-          position: "sticky", top: 65, zIndex: 40,
-          background: "color-mix(in srgb,var(--bg) 92%,transparent)",
-          backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          borderBottom: "1px solid var(--line)", paddingTop: 10, paddingBottom: 10,
-        }}>
-          <div className="au-wrap">
-            <FilterPills category={category} activeSubId={subId} onSelect={handleSub} />
-          </div>
-        </div>
-      )}
+      {/* ── Subcategory filter — same pattern as articles ── */}
+      <SubFilter subs={category?.subcategories ?? []} lang={lang} activeSubId={subId} onSelect={handleSub} />
 
       {/* ── Episodes list ── */}
       <main style={{ flex: 1 }}>
@@ -527,11 +530,11 @@ export default function AudioPage() {
             marginBottom: 18, paddingBottom: 14, borderBottom: "2px solid var(--line)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 4, height: 22, borderRadius: 2, background: ACCENT, flexShrink: 0 }} />
-              <span style={{ fontWeight: 800, fontSize: 18, color: "var(--ink)" }}>أبرز المختارات</span>
+              <span style={{ fontWeight: 800, fontSize: 18, color: "var(--ink)" }}>{lang === "ar" ? "أبرز المختارات" : "Top Picks"}</span>
             </div>
             {!loading && items.length > 0 && (
               <span style={{ fontSize: 12, color: "var(--muted-2)" }}>
-                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalPages * pageSize)} من {totalPages * pageSize}+ حلقة
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalPages * pageSize)} {lang === "ar" ? `من ${totalPages * pageSize}+ حلقة` : `of ${totalPages * pageSize}+ episodes`}
               </span>
             )}
           </div>
