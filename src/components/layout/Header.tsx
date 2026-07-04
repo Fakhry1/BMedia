@@ -2,10 +2,406 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { Search, Moon, Sun, Menu, X, LogOut, UserCircle } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
+import { Search, Moon, Sun, Menu, X, LogOut, UserCircle, Bell } from "lucide-react";
 import { getUser, clearSession, type UserInfo } from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
 import { useLang } from "@/lib/LangContext";
+
+/* ─── Notifications types & API ─────────────────────────────── */
+interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  readAt: string | null;
+  referenceId: string | null;
+  actionUrl: string | null;
+  createdAt: string;
+}
+
+interface NotificationsResponse {
+  items: Notification[];
+  totalCount: number;
+  page: number;
+}
+
+async function fetchNotifications(signal?: AbortSignal): Promise<NotificationsResponse> {
+  return apiFetch<NotificationsResponse>(
+    "/api/v1/Notifications?unreadOnly=false&page=1&pageSize=20",
+    { signal }
+  );
+}
+
+async function markAsRead(id: string): Promise<boolean> {
+  return apiFetch<boolean>(`/api/v1/Notifications/${id}/read`, { method: "PUT" });
+}
+
+function fmtNotifDate(iso: string, isAr: boolean) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1)  return isAr ? "الآن" : "Just now";
+  if (diffMin < 60) return isAr ? `منذ ${diffMin} د` : `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24)   return isAr ? `منذ ${diffH} س` : `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7)    return isAr ? `منذ ${diffD} يوم` : `${diffD}d ago`;
+  return d.toLocaleDateString(isAr ? "ar-EG" : "en-GB", { month: "short", day: "numeric" });
+}
+
+/* ─── NotificationBell component ────────────────────────────── */
+function NotificationBell({ lang }: { lang: string }) {
+  const [open,          setOpen]          = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount,   setUnreadCount]   = useState(0);
+  const [loading,       setLoading]       = useState(false);
+  const [isMobile,      setIsMobile]      = useState(false);
+  const panelRef       = useRef<HTMLDivElement>(null);
+  const portalPanelRef = useRef<HTMLDivElement>(null);
+
+  /* Detect mobile screen */
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 640); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    try {
+      setLoading(true);
+      const data = await fetchNotifications(signal);
+      setNotifications(data.items);
+      setUnreadCount(data.items.filter(n => !n.isRead).length);
+    } catch {
+      /* silently ignore — don't disrupt the page */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /* Initial load + poll every 60 s */
+  useEffect(() => {
+    const ctrl = new AbortController();
+    load(ctrl.signal);
+    const interval = setInterval(() => load(), 60_000);
+    return () => { ctrl.abort(); clearInterval(interval); };
+  }, [load]);
+
+  /* Close on outside click — exclude both the inline panel and the portal panel */
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      const target = e.target as Node;
+      const insidePanel  = panelRef.current?.contains(target);
+      const insidePortal = portalPanelRef.current?.contains(target);
+      if (!insidePanel && !insidePortal) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  /* Reload when opening */
+  function handleOpen() {
+    setOpen(v => !v);
+    if (!open) load();
+  }
+
+  async function handleNotifClick(id: string, isRead: boolean) {
+    if (isRead) return;
+    /* Optimistic update — reflect change immediately */
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)
+    );
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    /* Persist to backend — revert on failure */
+    try {
+      await markAsRead(id);
+    } catch {
+      setNotifications(prev =>
+        prev.map(n => n.id === id ? { ...n, isRead: false, readAt: null } : n)
+      );
+      setUnreadCount(prev => prev + 1);
+    }
+  }
+
+  const isAr = lang === "ar";
+
+  return (
+    <div ref={panelRef} style={{ position: "relative" }}>
+      {/* Bell button */}
+      <button
+        onClick={handleOpen}
+        title={isAr ? "الإشعارات" : "Notifications"}
+        style={{
+          width: 40, height: 40, borderRadius: 12,
+          border: "1px solid var(--line)",
+          background: open ? "var(--surface-2)" : "var(--surface)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", position: "relative", transition: "background .15s",
+        }}>
+        <Bell size={17} style={{ color: "var(--ink-2)" }} />
+        {unreadCount > 0 && (
+          <span style={{
+            position: "absolute", top: 6, right: 6,
+            minWidth: 16, height: 16, borderRadius: 8,
+            background: "#EF4444", color: "#fff",
+            fontSize: 9, fontWeight: 800, lineHeight: "16px",
+            textAlign: "center", padding: "0 3px",
+            border: "1.5px solid var(--surface)",
+          }}>
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Desktop dropdown — absolute, stays inside header stacking context */}
+      {open && !isMobile && (
+        <div style={{
+          position: "absolute",
+          top: "calc(100% + 8px)",
+          right: 0,
+          width: "min(360px, calc(100vw - 32px))",
+          maxHeight: 480,
+          borderRadius: 18,
+          border: "1px solid var(--line)",
+          background: "var(--surface)",
+          boxShadow: "0 16px 48px rgba(0,0,0,.14)",
+          zIndex: 100,
+          display: "flex", flexDirection: "column", overflow: "hidden",
+        }}>
+          {/* Header row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px 12px", borderBottom: "1px solid var(--line)" }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: "var(--ink)" }}>
+              {isAr ? "الإشعارات" : "Notifications"}
+            </span>
+            {unreadCount > 0 && (
+              <span style={{ background: "rgba(239,68,68,.1)", color: "#EF4444", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>
+                {unreadCount} {isAr ? "جديد" : "new"}
+              </span>
+            )}
+          </div>
+
+          {/* List */}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {loading && notifications.length === 0 && (
+              <div style={{ padding: "32px 0", textAlign: "center" }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: "50%", margin: "0 auto 10px",
+                  border: "2.5px solid var(--forest)", borderTopColor: "transparent",
+                  animation: "notif-spin 1s linear infinite",
+                }} />
+                <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>
+                  {isAr ? "جارٍ التحميل…" : "Loading…"}
+                </p>
+              </div>
+            )}
+
+            {!loading && notifications.length === 0 && (
+              <div style={{ padding: "40px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>🔔</div>
+                <p style={{ color: "var(--muted)", fontSize: 14, margin: 0 }}>
+                  {isAr ? "لا توجد إشعارات" : "No notifications"}
+                </p>
+              </div>
+            )}
+
+            {notifications.map((n, idx) => (
+              <div key={n.id} style={{
+                borderLeft: n.isRead ? "3px solid transparent" : "3px solid #EF4444",
+                background: n.isRead ? "transparent" : "rgba(239,68,68,.06)",
+                transition: "background .2s",
+              }}>
+                {idx > 0 && <div style={{ height: 1, background: "var(--line)" }} />}
+                <button
+                  onClick={() => handleNotifClick(n.id, n.isRead)}
+                  style={{
+                    width: "100%", textAlign: isAr ? "right" : "left",
+                    padding: "12px 14px",
+                    background: "transparent",
+                    border: "none", cursor: n.isRead ? "default" : "pointer",
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                    opacity: n.isRead ? 0.55 : 1,
+                    transition: "opacity .2s",
+                  }}
+                  onMouseEnter={e => { if (!n.isRead) e.currentTarget.style.opacity = "0.85"; }}
+                  onMouseLeave={e => { if (!n.isRead) e.currentTarget.style.opacity = "1"; }}
+                >
+                  {/* Icon */}
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                    background: n.isRead ? "var(--surface-2)" : "rgba(239,68,68,.12)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Bell size={15} style={{ color: n.isRead ? "var(--muted-2)" : "#EF4444" }} />
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      color: n.isRead ? "var(--muted)" : "var(--ink)",
+                      fontSize: 13, fontWeight: n.isRead ? 400 : 700,
+                      lineHeight: 1.4, margin: "0 0 3px",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {n.title}
+                    </p>
+                    <p style={{
+                      color: "var(--muted-2)", fontSize: 12, lineHeight: 1.5, margin: "0 0 4px",
+                      display: "-webkit-box", WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical", overflow: "hidden",
+                    }}>
+                      {n.message}
+                    </p>
+                    <span style={{
+                      fontSize: 10,
+                      color: n.isRead ? "var(--muted-2)" : "#EF4444",
+                      fontWeight: n.isRead ? 400 : 600,
+                    }}>
+                      {fmtNotifDate(n.createdAt, isAr)}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer */}
+          {notifications.length > 0 && (
+            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--line)", textAlign: "center" }}>
+              <span style={{ fontSize: 12, color: "var(--muted-2)" }}>
+                {isAr ? `${notifications.length} إشعار` : `${notifications.length} notifications`}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mobile bottom sheet — rendered via Portal at body level to escape header stacking context */}
+      {open && isMobile && typeof document !== "undefined" && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setOpen(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 9998,
+              background: "rgba(0,0,0,.5)", backdropFilter: "blur(4px)",
+            }}
+          />
+          {/* Bottom sheet */}
+          <div ref={portalPanelRef} style={{
+            position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
+            maxHeight: "75vh",
+            borderRadius: "20px 20px 0 0",
+            border: "1px solid var(--line)",
+            background: "var(--surface)",
+            boxShadow: "0 -8px 40px rgba(0,0,0,.25)",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", flexDirection: "column", borderBottom: "1px solid var(--line)" }}>
+              {/* Drag handle */}
+              <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
+                <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--line)" }} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 18px 14px" }}>
+                <span style={{ fontWeight: 800, fontSize: 15, color: "var(--ink)" }}>
+                  {isAr ? "الإشعارات" : "Notifications"}
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {unreadCount > 0 && (
+                    <span style={{ background: "rgba(239,68,68,.1)", color: "#EF4444", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>
+                      {unreadCount} {isAr ? "جديد" : "new"}
+                    </span>
+                  )}
+                  <button onClick={() => setOpen(false)} style={{
+                    width: 28, height: 28, borderRadius: "50%", border: "1px solid var(--line)",
+                    background: "var(--surface-2)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <X size={14} style={{ color: "var(--ink-2)" }} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* List */}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {loading && notifications.length === 0 && (
+                <div style={{ padding: "32px 0", textAlign: "center" }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", margin: "0 auto 10px", border: "2.5px solid var(--forest)", borderTopColor: "transparent", animation: "notif-spin 1s linear infinite" }} />
+                  <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{isAr ? "جارٍ التحميل…" : "Loading…"}</p>
+                </div>
+              )}
+              {!loading && notifications.length === 0 && (
+                <div style={{ padding: "40px 0", textAlign: "center" }}>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>🔔</div>
+                  <p style={{ color: "var(--muted)", fontSize: 14, margin: 0 }}>{isAr ? "لا توجد إشعارات" : "No notifications"}</p>
+                </div>
+              )}
+              {notifications.map((n, idx) => (
+                <div key={n.id} style={{
+                  borderLeft: n.isRead ? "3px solid transparent" : "3px solid #EF4444",
+                  background: n.isRead ? "transparent" : "rgba(239,68,68,.06)",
+                  transition: "background .2s",
+                }}>
+                  {idx > 0 && <div style={{ height: 1, background: "var(--line)" }} />}
+                  <button
+                    onClick={() => handleNotifClick(n.id, n.isRead)}
+                    style={{
+                      width: "100%", textAlign: isAr ? "right" : "left",
+                      padding: "12px 14px",
+                      background: "transparent",
+                      border: "none", cursor: n.isRead ? "default" : "pointer",
+                      display: "flex", alignItems: "flex-start", gap: 10,
+                      opacity: n.isRead ? 0.55 : 1,
+                      transition: "opacity .2s",
+                    }}
+                    onMouseEnter={e => { if (!n.isRead) e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={e => { if (!n.isRead) e.currentTarget.style.opacity = "1"; }}
+                  >
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                      background: n.isRead ? "var(--surface-2)" : "rgba(239,68,68,.12)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <Bell size={15} style={{ color: n.isRead ? "var(--muted-2)" : "#EF4444" }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ color: n.isRead ? "var(--muted)" : "var(--ink)", fontSize: 13, fontWeight: n.isRead ? 400 : 700, lineHeight: 1.4, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {n.title}
+                      </p>
+                      <p style={{ color: "var(--muted-2)", fontSize: 12, lineHeight: 1.5, margin: "0 0 4px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {n.message}
+                      </p>
+                      <span style={{ fontSize: 10, color: n.isRead ? "var(--muted-2)" : "#EF4444", fontWeight: n.isRead ? 400 : 600 }}>
+                        {fmtNotifDate(n.createdAt, isAr)}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {notifications.length > 0 && (
+              <div style={{ padding: "10px 14px", borderTop: "1px solid var(--line)", textAlign: "center" }}>
+                <span style={{ fontSize: 12, color: "var(--muted-2)" }}>
+                  {isAr ? `${notifications.length} إشعار` : `${notifications.length} notifications`}
+                </span>
+              </div>
+            )}
+          </div>
+        </>,
+        document.body
+      )}
+
+      <style>{`@keyframes notif-spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
 export default function Header() {
   const { lang, t, setLang } = useLang();
@@ -164,6 +560,9 @@ export default function Header() {
                 title={t.switchLanguage}>
                 {lang === "ar" ? "EN" : "ع"}
               </button>
+
+              {/* Notification bell — always visible in header for logged-in users */}
+              {user && <NotificationBell lang={lang} />}
 
               {/* Theme toggle */}
               <button onClick={toggleTheme} className="w-10 h-10 rounded-xl border flex items-center justify-center transition-all"
