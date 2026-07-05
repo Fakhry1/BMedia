@@ -447,6 +447,18 @@ export default function Header() {
     };
   }, [drawerOpen]);
 
+  /* Keep --header-h in sync so sticky SubFilter bars don't overlap */
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (!header) return;
+    const update = () =>
+      document.documentElement.style.setProperty("--header-h", `${header.getBoundingClientRect().height}px`);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, []);
+
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);

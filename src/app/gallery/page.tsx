@@ -414,7 +414,7 @@ function zoomIcon(sym: string) {
   return <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>{sym}</span>;
 }
 
-/* ─── SubFilter — same pattern as articles ───────────────── */
+/* ─── SubFilter ──────────────────────────────────────────── */
 function SubFilter({
   subs, lang, activeSubId, onSelect,
 }: {
@@ -425,17 +425,16 @@ function SubFilter({
   if (subs.length === 0) return null;
   return (
     <div style={{
-      position: "sticky", top: 65, zIndex: 40,
+      position: "sticky", top: "var(--header-h, 85px)", zIndex: 40,
       background: "color-mix(in srgb,var(--bg) 94%,transparent)",
       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
       borderBottom: "1px solid var(--line)",
     }}>
       <div className="gl-wrap">
-        <div style={{
-          display: "flex", gap: 8, alignItems: "center",
-          padding: "10px 0", overflowX: "auto", scrollbarWidth: "none",
-        }}>
-          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>{lang === "ar" ? "تصفية:" : "Filter:"}</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 0", overflowX: "auto", scrollbarWidth: "none" }}>
+          <span style={{ fontSize: 12, color: "var(--muted-2)", fontWeight: 600, flexShrink: 0 }}>
+            {lang === "ar" ? "تصفية:" : "Filter:"}
+          </span>
           {[{ id: null, name: lang === "ar" ? "الكل" : "All" }, ...subs.map(s => ({ id: s.id, name: s.name }))].map(s => {
             const active = s.id === activeSubId;
             return (
@@ -528,7 +527,7 @@ export default function GalleryPage() {
       <div style={{
         background: "linear-gradient(150deg,#1e1b4b 0%,#312e81 45%,#0f0e1f 100%)",
         padding: "clamp(24px,5vw,44px) 0 clamp(20px,4vw,36px)",
-        position: "relative", overflow: "hidden",
+        position: "relative",
       }}>
         <div style={{ position: "absolute", inset: 0, opacity: .05,
           backgroundImage: "radial-gradient(circle,#fff 1px,transparent 1px)",

@@ -51,7 +51,7 @@ function SubFilter({
   if (subs.length === 0) return null;
   return (
     <div style={{
-      position: "sticky", top: 65, zIndex: 40,
+      position: "sticky", top: "var(--header-h, 65px)", zIndex: 40,
       background: "color-mix(in srgb,var(--bg) 94%,transparent)",
       backdropFilter: "blur(14px)",
       WebkitBackdropFilter: "blur(14px)",
@@ -452,7 +452,7 @@ export default function ArticlesPage() {
       {/* Hero */}
       <section style={{
         background: "linear-gradient(135deg,#1e3a2f 0%,#14532d 45%,#0f1f14 100%)",
-        padding: "56px 0 52px", position: "relative", overflow: "hidden",
+        padding: "56px 0 52px", position: "relative",
       }}>
         <div style={{ position: "absolute", top: -60, left: -60, width: 220, height: 220,
           borderRadius: "50%", background: "rgba(255,255,255,.03)" }} />

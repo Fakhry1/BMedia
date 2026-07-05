@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-@theme inline {
+:root {
+  --header-h:  84px;
   --color-forest:    #0B2318;
   --color-forest-2:  #0E2B1F;
   --color-forest-3:  #142E22;
@@ -15,9 +16,6 @@
   --color-ink-2:     #1E3026;
   --color-muted:     #5C7265;
   --color-muted-2:   #8DA898;
-}
-
-:root {
   --forest:    #0B2318;
   --gold:      #C8A84B;
   --gold-2:    #E3C97A;
@@ -59,7 +57,7 @@
 
 html, body {
   height: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }

@@ -259,7 +259,7 @@ function SubFilter({
   if (subs.length === 0) return null;
   return (
     <div style={{
-      position: "sticky", top: 65, zIndex: 40,
+      position: "sticky", top: "var(--header-h, 65px)", zIndex: 40,
       background: "color-mix(in srgb,var(--bg) 94%,transparent)",
       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
       borderBottom: "1px solid var(--line)",
